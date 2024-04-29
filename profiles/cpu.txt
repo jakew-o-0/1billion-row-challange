@@ -1,0 +1,33 @@
+PeriodType: cpu nanoseconds
+Period: 10000000
+Time: 2024-04-28 16:26:27.736992566 +0100 BST
+Duration: 201.
+Samples:
+samples/count cpu/nanoseconds
+          1   10000000: 1 2 3 4 5 
+          1   10000000: 6 7 8 9 10 11 12 13 14 15 16 17 18 
+Locations
+     1: 0x46f869 M=1 runtime.procyield /usr/lib/go/src/runtime/asm_amd64.s:803 s=798
+     2: 0x40c6a9 M=1 runtime.lock2 /usr/lib/go/src/runtime/lock_futex.go:95 s=55
+     3: 0x4061a4 M=1 runtime.lockWithRank /usr/lib/go/src/runtime/lockrank_off.go:24 s=23
+             runtime.lock /usr/lib/go/src/runtime/lock_futex.go:52 s=51
+             runtime.chansend /usr/lib/go/src/runtime/chan.go:202 s=160
+     4: 0x4060f6 M=1 runtime.chansend1 /usr/lib/go/src/runtime/chan.go:145 s=144
+     5: 0x507ae4 M=1 brc/cmd.readChunk /home/jake/projects/1brc/cmd/data-pipeline.go:64 s=50
+     6: 0x42a760 M=1 runtime.(*mspan).init /usr/lib/go/src/runtime/mheap.go:1680 s=1678
+     7: 0x429ddc M=1 runtime.(*mheap).initSpan /usr/lib/go/src/runtime/mheap.go:1380 s=1377
+     8: 0x429c1c M=1 runtime.(*mheap).allocSpan /usr/lib/go/src/runtime/mheap.go:1340 s=1171
+     9: 0x429478 M=1 runtime.(*mheap).allocManual /usr/lib/go/src/runtime/mheap.go:990 s=986
+    10: 0x4515da M=1 runtime.stackpoolalloc /usr/lib/go/src/runtime/stack.go:199 s=193
+    11: 0x451915 M=1 runtime.stackcacherefill /usr/lib/go/src/runtime/stack.go:282 s=271
+    12: 0x451e44 M=1 runtime.stackalloc /usr/lib/go/src/runtime/stack.go:384 s=336
+    13: 0x4529a4 M=1 runtime.copystack /usr/lib/go/src/runtime/stack.go:870 s=854
+    14: 0x453188 M=1 runtime.newstack /usr/lib/go/src/runtime/stack.go:1112 s=962
+    15: 0x495724 M=1 strconv.atof32 /usr/lib/go/src/strconv/atof.go:566 s=566
+    16: 0x495ddd M=1 strconv.parseFloatPrefix /usr/lib/go/src/strconv/atof.go:705 s=703
+    17: 0x495c24 M=1 strconv.ParseFloat /usr/lib/go/src/strconv/atof.go:696 s=695
+    18: 0x507cc4 M=1 brc/cmd.tokenizeString /home/jake/projects/1brc/cmd/data-pipeline.go:79 s=70
+Mappings
+1: 0x400000/0x50a000/0x0 /home/jake/projects/1brc/cmd.test  [FN]
+2: 0x7ffce1744000/0x7ffce1746000/0x0 [vdso]  
+3: 0xffffffffff600000/0xffffffffff601000/0x0 [vsyscall]  
