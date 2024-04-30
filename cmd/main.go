@@ -44,21 +44,11 @@ func main() {
     CreateReadChunkWorkers( readChunkWg, masterWg, readChunkChan, chunkChan, chunkResultChans)
     go wait(masterWg, readChunkWg, readChunkChan)
 
-
-    // fanin collectorChans from workers
-    aggrigateResults := make(chan StationDataMap)
-    for _,c := range *chunkResultChans {
-        go func(c chan StationDataMap) {
-            for r := range c {
-                aggrigateResults <- r
-            }
-        }(*c)
-    }
     
     // collect all aggrigated results into a single map
     finalMap := make(StationDataMap)
     masterWg.Add(1)
-    result := FinalCollect(aggrigateResults, finalMap, masterWg)
+    result := FinalCollect(*chunkResultChans, finalMap, masterWg)
     fmt.Printf("%+v", result)
 
 
