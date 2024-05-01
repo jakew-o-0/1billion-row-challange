@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -30,7 +29,7 @@ func generateChunks(
     defer f.Close()
 
     // create buffer
-    for range 10 {
+    for range 1_000_0 {
         buff := make([]byte, chunckSize)
         bytesRead,_ := f.ReadAt(buff, offset)
 
@@ -126,28 +125,23 @@ func collectTokens (
 
 func FinalCollect(
     aggrigateResults []*chan StationDataMap,
-    final StationDataMap,
+    result chan<- StationDataMap, 
     wg *sync.WaitGroup,
-) StationDataMap {
+) {
     defer wg.Done()
-    i := 0
-    for {
-        select {
-        case r := <-*aggrigateResults[i]:
-            Collect(r, final)
-        }
-
-        i++
-        if i >= len(aggrigateResults) {
-            i = 0
+    final := make(StationDataMap)
+    for _,a := range aggrigateResults {
+        for r := range *a {
+            final = Collect(r, final)
         }
     }
+    result <- final
 }
 
 func Collect(
     cur StationDataMap,
     final StationDataMap,
-) {
+) StationDataMap {
     for k,v := range cur {
         t,ok := final[k]
         if !ok {
@@ -165,5 +159,6 @@ func Collect(
         }
         final[k] = t
     }
-    fmt.Printf("%v\n", final)
+    return final
 }
+

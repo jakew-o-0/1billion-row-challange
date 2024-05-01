@@ -46,13 +46,13 @@ func main() {
 
     
     // collect all aggrigated results into a single map
-    finalMap := make(StationDataMap)
-    masterWg.Add(1)
-    result := FinalCollect(*chunkResultChans, finalMap, masterWg)
-    fmt.Printf("%+v", result)
-
+    collectChan, collectWg := CreateWorkerGroup[StationDataMap]()
+    collectWg.Add(1)
+    go FinalCollect(*chunkResultChans, collectChan, collectWg)
+    go wait(masterWg, collectWg, collectChan)
 
     masterWg.Wait()
+    fmt.Printf("%+v", <-collectChan)
 }
 
 // creating workers
