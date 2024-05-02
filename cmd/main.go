@@ -1,128 +1,87 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"sync"
+	"os"
 )
 
-type StationToken struct {
-    Station string
-    Num float64
-}
 
-type StationData struct {
-    min float64
-    max float64
+type stationData struct {
+    min int
+    max int
+    sum int
     count int
-    total float64
 }
 
-type StationDataMap map[string]StationData
-
-const fileSize = 13472020
-const channelSize = 64
-const chunckSize int64 = 64 * 1024
-const TotalStations = 10_000
-const ColectLikeMapSize = 100
 
 func main() {
-
-    // master sync
-    masterWg := new(sync.WaitGroup)
-
-    // generate chunks
-    chunkChan,chunkWg := CreateWorkerGroup[[]byte]()
-    chunkWg.Add(1)
-    go generateChunks(chunkChan, 0, chunkWg)
-    go wait(masterWg, chunkWg, chunkChan)
-
-
-    // read each incoming chunk
-    // each chunk has its own pool of workers for tokenising and collecting
-    readChunkChan,readChunkWg := CreateWorkerGroup[string]()
-    chunkResultChans := new([]*chan StationDataMap)
-    CreateReadChunkWorkers( readChunkWg, masterWg, readChunkChan, chunkChan, chunkResultChans)
-    go wait(masterWg, readChunkWg, readChunkChan)
-
-    
-    // collect all aggrigated results into a single map
-    collectChan, collectWg := CreateWorkerGroup[StationDataMap]()
-    collectWg.Add(1)
-    go FinalCollect(*chunkResultChans, collectChan, collectWg)
-    go wait(masterWg, collectWg, collectChan)
-
-    masterWg.Wait()
-    fmt.Printf("%+v", <-collectChan)
-}
-
-// creating workers
-func CreateReadChunkWorkers(
-    readChunkWg *sync.WaitGroup,
-    masterWg *sync.WaitGroup,
-    readChunkChan chan string,
-    chunkChan <-chan []byte,
-    chunkResultChans *[]*chan StationDataMap,
-) {
-    readChunkWg.Add(channelSize)
-    for range channelSize {
-        go readChunk(chunkChan, readChunkChan, readChunkWg)
-
-        // tokenizer workers
-        tokensChan,tokenizerWg := CreateWorkerGroup[StationToken]()
-        tokenizerWg.Add(channelSize)
-        go CreateTokenizerWorkers(tokenizerWg, readChunkChan, tokensChan)
-        go wait(masterWg, tokenizerWg, tokensChan)
-
-        //collector workers
-        chunkResultChan, collectorWg := CreateWorkerGroup[StationDataMap]()
-        *chunkResultChans = append(*chunkResultChans, &chunkResultChan)
-        collectorWg.Add(1)
-        go collectTokens(tokensChan, chunkResultChan, collectorWg)
-        go wait(masterWg, collectorWg, chunkResultChan)
+    f,err := os.Open("./measurements.txt")
+    if err != nil {
+	f,err = os.Open("../measurements.txt")
+	if err != nil {
+	    panic(err)
+	}
     }
-}
 
-func CreateTokenizerWorkers(
-    tokenizerWg *sync.WaitGroup,
-    readChunkChan <-chan string,
-    tokensChan chan<- StationToken,
-) {
-    for range channelSize {
-        go tokenizeString(readChunkChan, tokensChan, tokenizerWg)
-    }
-}
+    stationsMap := make(map[string]*stationData)
+    r := bufio.NewScanner(f)
+    for r.Scan() {
+	tmpStation, tmpNum := splitLine(r.Bytes())
+	station := string(tmpStation)
+	num := createFixedPoint(tmpNum)
 
-func CreateCollectorWorkers(
-    collectorWg *sync.WaitGroup,
-    collectorChan chan<- StationDataMap,
-    tokensChan <-chan StationToken,
-) {
-    collectorWg.Add(channelSize)
-    for range channelSize {
+	s := stationsMap[station]
+	s = updateEntry(s, num)
+	stationsMap[station] = s
     }
 }
 
 
-
-
-
-// generic helper funcs
-func CreateWorkerGroup[T any]() (chan T, *sync.WaitGroup) {
-    c := make(chan T, channelSize)
-    w := new(sync.WaitGroup)
-    return c,w
+func splitLine(line []byte) ([]byte, []byte) {
+    length := len(line)-4
+    for i := length; i > 0; i-- {
+	if line[i] != ';' {
+	    continue
+	}
+	return line[:i], line[i:] 
+    }
+    panic(fmt.Errorf("invalid line. could not find ';'"))
 }
 
+func createFixedPoint(num []byte) int {
+    negative := false
+    n := 0
 
-func wait[T any](
-    masterWg *sync.WaitGroup,
-    chanelWg *sync.WaitGroup,
-    channel chan T,
+    for _,b := range num {
+	if b == '-' {
+	    negative = true
+	}
+	if b == '.' {
+	    continue
+	}
+	n = n*10 + int(b-'0')
+    }
 
-) {
-    defer masterWg.Done()
-    masterWg.Add(1)
+    if negative {
+	return -n
+    }
+    return n
+}
 
-    chanelWg.Wait()
-    close(channel)
+func updateEntry(entry *stationData, num int) *stationData {
+    if entry != nil {
+	entry.min = min(entry.min, num)
+	entry.max = min(entry.max, num)
+	entry.sum += num
+	entry.count++
+	return entry
+    }
+
+    return &stationData {
+	min: num,
+	max: num,
+	sum: num,
+	count: 1,
+    }
 }

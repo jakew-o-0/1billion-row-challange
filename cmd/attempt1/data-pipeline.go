@@ -1,4 +1,4 @@
-package main
+package attempt1
 
 import (
 	"os"
@@ -29,7 +29,7 @@ func generateChunks(
     defer f.Close()
 
     // create buffer
-    for range 1_000_0 {
+    for range 1_000_000 {
         buff := make([]byte, chunckSize)
         bytesRead,_ := f.ReadAt(buff, offset)
 
@@ -49,24 +49,41 @@ func generateChunks(
 
 func readChunk(
     recieveChunks <-chan []byte,
-    output chan<- string,
+    output chan<- StationToken,
     wg *sync.WaitGroup,
 ) {
     defer wg.Done()
     for buff := range recieveChunks {
-        start := 0
-        for i,b := range buff {
-            if b == '\n' {
-                // slice from begining to i\
-                line := buff[start:i]
-                start = i+1
-
-                output <- string(line)
-            }
-        }
+        TokenizeBuff(buff, output)
     }
 }
 
+func TokenizeBuff(buff []byte, output chan<- StationToken) {
+    start := 0
+    for i,b := range buff {
+        if b != '\n' {
+            continue
+        }
+        // slice from begining to i\
+        line := buff[start:i]
+        start = i+1
+
+        sarr := strings.Split(string(line), ";")
+        num,err := strconv.ParseFloat(sarr[1], 32)
+        if err != nil {
+            panic(err)
+        }
+
+        tok :=  StationToken {
+            Station: sarr[0],
+            Num: num,
+        }
+
+        output<- tok 
+    }
+}
+
+/*
 func tokenizeString(
     recieveStrings <-chan string,
     output chan<- StationToken,
@@ -75,19 +92,10 @@ func tokenizeString(
     defer wg.Done()
     for s := range recieveStrings {
         // parse slice
-        sarr := strings.Split(s, ";")
-        num,err := strconv.ParseFloat(sarr[1], 32)
-        if err != nil {
-            panic(err)
-        }
-
-        output <- StationToken {
-            Station: sarr[0],
-            Num: num,
-        }
     }
 }
 
+*/
 
 func collectTokens (
     recieveTokens <-chan StationToken,
