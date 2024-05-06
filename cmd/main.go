@@ -5,7 +5,8 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"reflect"
+
+	"github.com/cespare/xxhash"
 )
 
 
@@ -37,7 +38,6 @@ func main() {
 	}
     }
 
-
     r := bufio.NewScanner(f)
     for r.Scan() {
 	line := r.Bytes()
@@ -49,7 +49,7 @@ func main() {
     for _,i := range stations {
 	v := stationsMap[i]
 	mean := toFloat(v.data.sum) / toFloat(v.data.count)
-	fmt.Printf("%s<%f.1/%f.1/%f.1/>\n", v.key, toFloat(v.data.min), toFloat(v.data.max), mean)
+	fmt.Printf("%s=%.1f/%.1f/%.1f, \n", v.key, toFloat(v.data.min), toFloat(v.data.max), mean)
     }
 }
 
@@ -57,7 +57,9 @@ func updateMap(
     station []byte,
     num int,
 ) {
-    idx := hash(station)
+    stationHash := xxhash.Sum64(station)
+    idx := stationHash & (MapSize-1)
+
     for {
 	if stationsMap[idx] == nil {
 	    stationsMap[idx] = &Station{
@@ -81,7 +83,7 @@ func updateMap(
 	    break
 	}
 
-	if reflect.DeepEqual(stationsMap[idx].key, station) {
+	if xxhash.Sum64(stationsMap[idx].key) == stationHash {
 	    s := stationsMap[idx]
 	    s.data.min = min(s.data.min, num)
 	    s.data.max = max(s.data.max, num)
@@ -137,17 +139,32 @@ func hash(key []byte) uint64 {
 	hash ^= uint64(b)
 	hash *= 1099511628211
     }
-    return hash & (MapSize-1)
+    return hash
 }
 
-func compareBytes(a []byte, b []byte) bool {
-    if len(a) != len(b) {
-	return false
+func readChunk(file *os.File, offset int) ([]byte, int) {
+    buff := make([]byte, 64*1024)
+    readBytes,_ := file.ReadAt(buff, int64(offset))
+    if readBytes == 1 {
+	return nil, 0
     }
-    for i,v := range a {
-	if b[i] != v {
-	    return false
+    for i := readBytes-1; i > 0; i-- {
+	if buff[i] == '\n' {
+	    return buff[:i], i
 	}
     }
-    return true
+    return nil, 0
+}
+
+func readLine(buff []byte, offset int) ([]byte, int) {
+    buff = buff[offset:]
+    if len(buff)-1 == 0 {
+	return nil,0
+    }
+    for i,b := range buff {
+	if b == '\n' {
+	    return buff[:i],len(buff[:i])
+	}
+    }
+    return nil,0
 }
