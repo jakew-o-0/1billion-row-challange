@@ -1,11 +1,12 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
-	"reflect"
+
+	"github.com/cespare/xxhash"
 )
 
 
@@ -37,14 +38,36 @@ func main() {
 	}
     }
 
+    i := 0
+    for {
+	if i >= 100_000_000 {
+	    break
+	}
+	var chunkOffset int64 = 0
+	chunk := make([]byte, 1024*1024)
+	linesRead,err := f.ReadAt(chunk, chunkOffset)
+	if err != nil && err != io.EOF {
+	    panic(err)
+	}
+	if linesRead == 0 {
+	    break
+	}
+	for i := linesRead-1; i > 0; i-- {
+	    if chunk[i] == '\n' {
+		chunk = chunk[:i]
+		chunkOffset += int64(linesRead-i)
+		break
+	    }
+	}
 
-    r := bufio.NewScanner(f)
-    for r.Scan() {
-	line := r.Bytes()
-	station, tmpNum := splitLine(line)
-	num := createFixedPoint(tmpNum)
-	updateMap(station, num)
+	for _,line := range bytes.Split(chunk, []byte("\n")){
+	    station, tmpNum := splitLine(line)
+	    num := createFixedPoint(tmpNum)
+	    updateMap(station, num)
+	    i++
+	}
     }
+
 
     for _,i := range stations {
 	v := stationsMap[i]
@@ -57,7 +80,7 @@ func updateMap(
     station []byte,
     num int,
 ) {
-    idx := hash(station)
+    idx := xxhash.Sum64(station) & (MapSize-1)
     for {
 	if stationsMap[idx] == nil {
 	    stationsMap[idx] = &Station{
@@ -81,7 +104,7 @@ func updateMap(
 	    break
 	}
 
-	if reflect.DeepEqual(stationsMap[idx].key, station) {
+	if bytes.Equal(stationsMap[idx].key, station) {
 	    s := stationsMap[idx]
 	    s.data.min = min(s.data.min, num)
 	    s.data.max = max(s.data.max, num)
@@ -114,6 +137,7 @@ func createFixedPoint(num []byte) int {
     for _,b := range num {
 	if b == '-' {
 	    negative = true
+	    continue
 	}
 	if b == '.' {
 	    continue
