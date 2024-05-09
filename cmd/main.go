@@ -44,25 +44,11 @@ func main() {
 	}
     }
 
-
     var chunkOffset int64 = 0
     for {
-	chunk := make([]byte, 1024*1024)
-	readLines,err := f.ReadAt(chunk, chunkOffset) 
-	if readLines == 0 || err != nil {
-	    if err != io.EOF {
-		panic(err)
-	    }
+	chunk,breakSig := readChunk(f, &chunkOffset)
+	if breakSig {
 	    break
-	}
-
-	var i int64 = int64(readLines-1)
-	for ;i > 0; i-- {
-	    if chunk[i] == '\n' {
-		chunk = chunk[:i]
-		chunkOffset += int64(i)
-		break
-	    }
 	}
 
 	var start int = 0
@@ -70,12 +56,13 @@ func main() {
 	    if b != '\n' {
 		continue
 	    }
+
 	    line := chunk[start:i]
 	    start = i
-
 	    if len(line) == 0 {
 		continue
 	    }
+
 	    station, tmpNum := splitLine(line)
 	    num := createFixedPoint(tmpNum)
 	    updateMap(station, num)
@@ -95,13 +82,32 @@ func main() {
     }
 }
 
+func readChunk(f *os.File, chunkOffset *int64) ([]byte, bool) {
+    chunk := make([]byte, 1024*1024)
+    readLines,err := f.ReadAt(chunk, *chunkOffset) 
+    if readLines == 0 || err != nil {
+	if err != io.EOF {
+	    panic(err)
+	}
+	return nil, true
+    }
+
+    var i int64 = int64(readLines-1)
+    for ;i > 0; i-- {
+	if chunk[i] == '\n' {
+	    chunk = chunk[:i]
+	    *chunkOffset += int64(i)
+	    return chunk, false
+	}
+    }
+    return nil,true
+}
+
 func updateMap(
     station []byte,
     num int,
 ) {
-    stationHash := xxhash.Sum64(station)
-    idx := stationHash & (MapSize-1)
-
+    idx := xxhash.Sum64(station) & (MapSize-1)
     for {
 	if stationsMap[idx] == nil {
 	    stationsMap[idx] = &Station{
