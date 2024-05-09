@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/cespare/xxhash"
+	_ "github.com/cespare/xxhash"
 )
 
 
@@ -79,22 +80,13 @@ func main() {
 	    num := createFixedPoint(tmpNum)
 	    updateMap(station, num)
 	}
-
-	/*
-	lines := bytes.Split(chunk, []byte("\n"))
-	for _,line := range lines {
-	    if len(line) == 0 {
-		continue
-	    }
-	}
-	*/
     }
 
     for _,i := range stations {
 	v := stationsMap[i]
 	mean := toFloat(v.data.sum) / toFloat(v.data.count)
 	fmt.Printf(
-	    "%s=%.1f/%.1f/%.1f,\n",
+	    "%s=%.1f/%.1f/%.1f,",
 	    v.key,
 	    toFloat(v.data.min),
 	    toFloat(v.data.max),
@@ -133,7 +125,7 @@ func updateMap(
 	    break
 	}
 
-	if xxhash.Sum64(stationsMap[idx].key) == stationHash {
+	if bytes.Equal(station, stationsMap[idx].key) {
 	    s := stationsMap[idx]
 	    s.data.min = min(s.data.min, num)
 	    s.data.max = max(s.data.max, num)
@@ -183,13 +175,4 @@ func createFixedPoint(num []byte) int {
 
 func toFloat(i int) float32 {
     return float32(i) / 10
-}
-
-func hash(key []byte) uint64 {
-    var hash uint64 = 14695981039346656037
-    for b := range key {
-	hash ^= uint64(b)
-	hash *= 1099511628211
-    }
-    return hash
 }
