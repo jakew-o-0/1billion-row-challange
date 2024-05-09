@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/cespare/xxhash"
 	_ "github.com/cespare/xxhash"
@@ -23,34 +24,33 @@ type Station struct {
     data *stationData
 }
 
-type StationsMap []*Station
 type stationToken struct {
     station []byte
     num int
 }
 
+
 const MapSize = 1<<17
+const ChannelSize = 64
 var buckets = 0
 var stationsMap = make([]*Station, MapSize)
 var stations = make([]uint64, 0)
 
 
 func main() {
-    f,err := os.Open("./measurements.txt")
-    if err != nil {
-	f,err = os.Open("../measurements.txt")
-	if err != nil {
-	    panic(err)
-	}
-    }
+    var masterWG sync.WaitGroup
+
+    // chunkWorkers -> chunkChan
+    chunkChan, chunkWorkersWG := CreateWorkerGroupUtils[[]byte]()
+    go readChunkWorker(chunkChan, chunkWorkersWG)
+    wait(&masterWG, chunkWorkersWG, chunkChan)
+
+    // chunkChan -> tokeniseChunkWorker -> stationTokenChan
+    stationTokenChan, tokeniserWG := CreateWorkerGroupUtils[stationToken]()
+    wait(&masterWG, tokeniserWG, stationTokenChan)
 
     var chunkOffset int64 = 0
     for {
-	chunk,breakSig := readChunk(f, &chunkOffset)
-	if breakSig {
-	    break
-	}
-
 	var start int = 0
 	for i,b := range chunk {
 	    if b != '\n' {
@@ -82,25 +82,62 @@ func main() {
     }
 }
 
-func readChunk(f *os.File, chunkOffset *int64) ([]byte, bool) {
-    chunk := make([]byte, 1024*1024)
-    readLines,err := f.ReadAt(chunk, *chunkOffset) 
-    if readLines == 0 || err != nil {
-	if err != io.EOF {
+func CreateWorkerGroupUtils[T any]() (chan T, *sync.WaitGroup) {
+    c := make(chan T, ChannelSize)
+    w := new(sync.WaitGroup)
+    return c,w
+}
+
+
+func wait[T any](
+    masterWg *sync.WaitGroup,
+    chanelWg *sync.WaitGroup,
+    channel chan T,
+
+) {
+    defer masterWg.Done()
+    masterWg.Add(1)
+
+    chanelWg.Wait()
+    close(channel)
+}
+
+func readChunkWorker(
+    chunkChan chan<- []byte,
+    chunkWorkerWG *sync.WaitGroup,
+) {
+    defer chunkWorkerWG.Done()
+
+
+    f,err := os.Open("./measurements.txt")
+    if err != nil {
+	f,err = os.Open("../measurements.txt")
+	if err != nil {
 	    panic(err)
 	}
-	return nil, true
     }
+    
 
-    var i int64 = int64(readLines-1)
-    for ;i > 0; i-- {
-	if chunk[i] == '\n' {
-	    chunk = chunk[:i]
-	    *chunkOffset += int64(i)
-	    return chunk, false
+    var chunkOffset int64 = 0
+    for {
+	chunk := make([]byte, 1024*1024)
+	readLines,err := f.ReadAt(chunk, chunkOffset) 
+	if readLines == 0 || err != nil {
+	    if err != io.EOF {
+		panic(err)
+	    }
+	    return
+	}
+
+	var i int64 = int64(readLines-1)
+	for ;i > 0; i-- {
+	    if chunk[i] == '\n' {
+		chunk = chunk[:i]
+		chunkOffset += int64(i)
+		chunkChan<- chunk
+	    }
 	}
     }
-    return nil,true
 }
 
 func updateMap(
