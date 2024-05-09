@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/cespare/xxhash"
@@ -23,11 +23,16 @@ type Station struct {
 }
 
 type StationsMap []*Station
+type stationToken struct {
+    station []byte
+    num int
+}
 
 const MapSize = 1<<17
 var buckets = 0
 var stationsMap = make([]*Station, MapSize)
 var stations = make([]uint64, 0)
+
 
 func main() {
     f,err := os.Open("./measurements.txt")
@@ -38,18 +43,63 @@ func main() {
 	}
     }
 
-    r := bufio.NewScanner(f)
-    for r.Scan() {
-	line := r.Bytes()
-	station, tmpNum := splitLine(line)
-	num := createFixedPoint(tmpNum)
-	updateMap(station, num)
+
+    var chunkOffset int64 = 0
+    for {
+	chunk := make([]byte, 1024*1024)
+	readLines,err := f.ReadAt(chunk, chunkOffset) 
+	if readLines == 0 || err != nil {
+	    if err != io.EOF {
+		panic(err)
+	    }
+	    break
+	}
+
+	var i int64 = int64(readLines-1)
+	for ;i > 0; i-- {
+	    if chunk[i] == '\n' {
+		chunk = chunk[:i]
+		chunkOffset += int64(i)
+		break
+	    }
+	}
+
+	var start int = 0
+	for i,b := range chunk {
+	    if b != '\n' {
+		continue
+	    }
+	    line := chunk[start:i]
+	    start = i
+
+	    if len(line) == 0 {
+		continue
+	    }
+	    station, tmpNum := splitLine(line)
+	    num := createFixedPoint(tmpNum)
+	    updateMap(station, num)
+	}
+
+	/*
+	lines := bytes.Split(chunk, []byte("\n"))
+	for _,line := range lines {
+	    if len(line) == 0 {
+		continue
+	    }
+	}
+	*/
     }
 
     for _,i := range stations {
 	v := stationsMap[i]
 	mean := toFloat(v.data.sum) / toFloat(v.data.count)
-	fmt.Printf("%s=%.1f/%.1f/%.1f, \n", v.key, toFloat(v.data.min), toFloat(v.data.max), mean)
+	fmt.Printf(
+	    "%s=%.1f/%.1f/%.1f,\n",
+	    v.key,
+	    toFloat(v.data.min),
+	    toFloat(v.data.max),
+	    mean,
+	)
     }
 }
 
@@ -107,6 +157,7 @@ func splitLine(line []byte) ([]byte, []byte) {
 	    return line[:i], line[i+1:] 
 	}
     }
+    fmt.Printf("line: %s\n", line)
     panic(fmt.Errorf("invalid line. could not find ';'"))
 }
 
@@ -116,15 +167,16 @@ func createFixedPoint(num []byte) int {
     for _,b := range num {
 	if b == '-' {
 	    negative = true
+	    continue
 	}
 	if b == '.' {
 	    continue
 	}
-	n = n*10 + int(b-'0')
+	n = (n*10) + int(b-'0')
     }
 
     if negative {
-	return -n
+	return -1*n
     }
     return n
 }
@@ -140,31 +192,4 @@ func hash(key []byte) uint64 {
 	hash *= 1099511628211
     }
     return hash
-}
-
-func readChunk(file *os.File, offset int) ([]byte, int) {
-    buff := make([]byte, 64*1024)
-    readBytes,_ := file.ReadAt(buff, int64(offset))
-    if readBytes == 1 {
-	return nil, 0
-    }
-    for i := readBytes-1; i > 0; i-- {
-	if buff[i] == '\n' {
-	    return buff[:i], i
-	}
-    }
-    return nil, 0
-}
-
-func readLine(buff []byte, offset int) ([]byte, int) {
-    buff = buff[offset:]
-    if len(buff)-1 == 0 {
-	return nil,0
-    }
-    for i,b := range buff {
-	if b == '\n' {
-	    return buff[:i],len(buff[:i])
-	}
-    }
-    return nil,0
 }
